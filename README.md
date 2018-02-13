@@ -1,5 +1,23 @@
 # Introduction to profiling
 
+- [ ] Intorduction
+- [x] gprof
+- [ ] perf
+- [ ] valgrind
+- [ ] lltng
+- [ ] babeltrace
+- [ ] zipkin
+- [ ] blkin
+- [ ] go pprof
+
+Clone repository and download submodules:
+
+```bash
+$ git clone https://github.com/Erdk/introtoprofiling
+$ cd introtoprofiling
+$ git submodule update --init
+```
+
 List of applications:
 
 - gprof
@@ -8,10 +26,19 @@ List of applications:
 - lttng & babeltrace
 - blkin
 - zipkin
+- go pprof
 
 # "Throw against the wall and see what sticks"
 
-Both gprof, perf and callgrind (part of Valgrind suite) are relatively easy to use and there won't need any code changes. Thanks to that they're fast to enable them in your application get the overview what's going on, what are the most frequently called functions and in which functions application spends most of the time. The penalty for ease of use is performance hit related to the tracing of the whole application, not getting 
+Both gprof, perf and callgrind (part of Valgrind suite) are relatively easy to use and there won't need any code changes. Thanks to that they're fast to enable them in your application get the overview what's going on, what are the most frequently called functions and in which functions application spends most of the time. The penalty for ease of use is performance hit related to the tracing of the whole application, and relatively low granuality. gprof is the oldest of those applications, I've included it because it widely available (maybe a bit for historical reasons). But if possible you'll be more satisified with using perf (in terms of functionality and performance) or valgrind (in terms of ease of use and correctness).
+
+Each of those tools produces three types o results:
+
+- flat profile: shows how much time your program spent in each function, and how many times that function was called. As the name suggests on this view you won't see any relation between functions,
+- call graph: for each function shows which functions called it, which other functions was called by it, and how many times. There is also an estimate of how much time was spent in the subroutines of each function.
+- annotate source code: returns source code with performance metrics in lines, where it was applicable.
+
+## Pros & cons
 
 Pros:
 
@@ -22,40 +49,302 @@ Cons:
 
 gprof & perf: 
 
-- the computed time and number of function calls are statistical, both of the programs checks callstack at "ticks", the more of those "ticks" pre second the worse the performance,
-- low granuality (compared to lttng).
+- the computed time and number of function calls are statistical, both of the programs checks callstack at "ticks"
+- low granuality (compared to lttng),
+- adds overhead.
 
 callgrind: 
 
--  tracks every call, so performance could be very low, in applications relying on network connections could led to timeouts and abnormal program behaviour,
+-  tracks every call, so performance could be very low, in applications relying on network connections could led to timeouts and abnormal program behaviour.
 
 ## gprof
 
-Simple tool, very easy way to enable: add '-pg' to to CFLAGS and LDFLAGS (at compiling and linking stages). After compilation run program, after finished execution there will be created file "gmon.out".
-
-Ex:
+Simple tool, very easy way to enable: add '-pg' to to CFLAGS and LDFLAGS (at compiling and linking stages). Also, with recent GCC versions you've also have to add '--no-pie -fPIC' to the compiler options for it to work. Key advantage here is no need to add new code (apart from Makefile). In directory 'c-ray' you could test gprof:
 
 ```bash
-$ ls
-hello.c
-$ gcc -pg -o hello hello.c
-$ ./hello
-$ ls
-gmon.out hello hello.c
-$ gprof hello gmon.out > gprof_out.txt
+$ cd introtoprofiling/c-ray
+$ make profile
 ```
 
-After this you could inspect flat profile and callgraph.
+This would create binary 'bin/c-ray-prof'. After executing it:
+
+```bash
+$ bin/c-ray-prof
+```
+
+There will be new file in directory: 'gmon.out'. With 'gprof' executable you could inspect the results.
+
+```bash
+$ gprof bin/c-ray-prof gmon.out | less
+```
+
+You should see something similar to this:
+
+```
+Flat profile:
+
+Each sample counts as 0.01 seconds.
+  %   cumulative   self              self     total
+ time   seconds   seconds    calls   s/call   s/call  name
+ 44.89    208.66   208.66 495703455     0.00     0.00  rayIntersectWithAABB
+ 17.60    290.46    81.80 62948596     0.00     0.00  rayIntersectsWithNode
+  6.91    322.60    32.14 247988102     0.00     0.00  vectorCross
+  6.57    353.15    30.55 168061837     0.00     0.00  rayIntersectsWithPolygon
+  5.41    378.32    25.17 620561735     0.00     0.00  subtractVectors
+  5.15    402.26    23.94  8180655     0.00     0.00  getClosestIsect
+  4.18    421.70    19.44 408107946     0.00     0.00  scalarProduct
+  1.48    428.58     6.88  1799410     0.00     0.00  getHighlights
+...
+```
+
+The output is relatively long, after each section there's lengthy description of columns. To supress it run grof with '-b' (brief), but I encourage you to read it at least once ;) 
+
+Now we get to options which could help us with analysis. When you only want to inspect flat profile use '-p' switch:
+
+```bash
+$ gprof -b -p bin/c-ray-prof gmon.out |  head
+Flat profile:
+
+Each sample counts as 0.01 seconds.
+  %   cumulative   self              self     total
+ time   seconds   seconds    calls   s/call   s/call  name
+ 44.89    208.66   208.66 495703455     0.00     0.00  rayIntersectWithAABB
+ 17.60    290.46    81.80 62948596     0.00     0.00  rayIntersectsWithNode
+  6.91    322.60    32.14 247988102     0.00     0.00  vectorCross
+  6.57    353.15    30.55 168061837     0.00     0.00  rayIntersectsWithPolygon
+  5.41    378.32    25.17 620561735     0.00     0.00  subtractVectors
+
+```
+
+You could also inspect flat profile of functions matching "symspec" (function name, source file) '-p\<symspec>' (note the lack of whitespace between symspec and -p):
+
+```bash
+$ gprof -b -prayIntersectWithAABB bin/c-ray-prof gmon.out  | head
+Flat profile:
+
+Each sample counts as 0.01 seconds.
+  %   cumulative   self              self     total
+ time   seconds   seconds    calls  us/call  us/call  name
+100.02    208.66   208.66 495703455     0.42     0.42  rayIntersectWithAABB
+
+```
+
+This could be useful, when you have multiple static functions with the same name. To exclude functions from flat profile use '-P' switch:
+
+```bash
+$ gprof -b -PrayIntersectWithAABB bin/c-ray-prof gmon.out  | head
+Flat profile:
+
+Each sample counts as 0.01 seconds.
+  %   cumulative   self              self     total
+ time   seconds   seconds    calls   s/call   s/call  name
+ 31.93     81.80    81.80 62948596     0.00     0.00  rayIntersectsWithNode
+ 12.55    113.94    32.14 247988102     0.00     0.00  vectorCross
+ 11.92    144.49    30.55 168061837     0.00     0.00  rayIntersectsWithPolygon
+  9.82    169.65    25.17 620561735     0.00     0.00  subtractVectors
+  9.35    193.60    23.94  8180655     0.00     0.00  getClosestIsect
+```
+
+When you compare with previous example you could see, that all values were adjusted. This could be useful when you want to exclude function you coudn't optimize and want to have a closer look on other potential candidates for optimization.
+
+In similar way you could inspect call graphs. To do this use '-q' and '-Q' switches. First dispaly ony call graph:
+
+```bash
+$ gprof -b -q bin/c-ray-prof gmon.out  | head -n 27
+                        Call graph
+
+
+granularity: each sample hit covers 2 byte(s) for 0.00% of 464.88 seconds
+
+index % time    self  children    called     name
+                                                 <spontaneous>
+[1]     98.3    3.86  453.32                 renderThread [1]
+                1.71  448.86 2703244/2703244     newTrace <cycle 1> [9]
+                0.21    1.11 1366674/1366676     transformCameraView [28]
+                0.35    0.25 1632466/10151652     normalizeVector [17]
+                0.54    0.00 1537256/1537256     getPixel [45]
+                0.18    0.00 4013744/19821218     getRandomDouble [36]
+                0.11    0.00 1441645/13375163     addColors [34]
+                0.00    0.00       6/6           computeTimeAverage [171]
+                0.00    0.00       5/5           getTile [172]
+-----------------------------------------------
+[2]     96.9    1.71  448.86 2703244+4995853 <cycle 1 as a whole> [2]
+                0.53  274.74 1721452             getLighting <cycle 1> [5]
+                0.44  173.35 3080079             newTrace <cycle 1> [9]
+                0.74    0.77 2897566             getReflectsAndRefracts <cycle 1> [27]
+-----------------------------------------------
+                9.68  163.67 3308211/8180655     newTrace <cycle 1> [9]
+               14.26  241.06 4872444/8180655     isInShadow [7]
+[3]     92.2   23.94  404.72 8180655         getClosestIsect [3]
+               81.80  315.75 62948596/62948596     rayIntersectsWithNode [4]
+                1.93    5.25 15315957/15315957     rayIntersectsWithSphereTemp [14]
+
+```
+
+Line with index denotes 'main' function of call graph. Functions above are 'parents', callers. Functions below are 'children', callees. In this example, call graph with index 3:
+
+Function | relation
+---------|---------
+newTrace | top most function
+isInShadow |  function called by newTrace
+getClosestInsect | main function of this call graph
+rayIntersectsWithNode | function called by getClosestInsect
+rayIntersectsWithSphereTemp | function called by rayIntersectsWithNode
+
+Numbers in 'called' column denotes respectively number of calls in scope of the parent and number of total calls. Similarily to '-p' with '-q\<symspec>' you could inspect call graph of function you choose:
+
+```bash
+$ gprof -b -qrayIntersectsWithNode bin/c-ray-prof gmon.out
+                        Call graph
+
+
+granularity: each sample hit covers 2 byte(s) for 0.00% of 464.88 seconds
+
+index % time    self  children    called     name
+                             213618252             rayIntersectsWithNode [4]
+               81.80  315.75 62948596/62948596     getClosestIsect (3)
+[4]     85.5   81.80  315.75 62948596+213618252 rayIntersectsWithNode [4]
+              208.66    0.00 495703455/495703455     rayIntersectWithAABB [8]
+               30.55   74.51 168061837/168061837     rayIntersectsWithPolygon [10]
+                1.58    0.00 18565813/25178963     vectorScale [22]
+                0.45    0.00 7636053/15517841     addVectors [35]
+                             213618252             rayIntersectsWithNode [4]
+-----------------------------------------------
+              208.66    0.00 495703455/495703455     rayIntersectsWithNode [4]
+[8]     44.9  208.66    0.00 495703455         rayIntersectWithAABB [8]
+-----------------------------------------------
+               30.55   74.51 168061837/168061837     rayIntersectsWithNode [4]
+[10]    22.6   30.55   74.51 168061837         rayIntersectsWithPolygon [10]
+               31.88    0.00 245938645/247988102     vectorCross [11]
+               23.91    0.00 589609039/620561735     subtractVectors [12]
+               17.05    0.00 357801568/408107946     scalarProduct [13]
+                1.68    0.00 6623695/6623695     uvFromValues [23]
+...
+```
+
+Last, but not least: gprof could annotate source file with profile information. As symspec the best is to choose file (e.g. render.c) to have annotated source file and files with calees:
+
+```C
+$ gprof -b -Arender.c bin/c-ray-prof gmon.out | less
+...
+*** File /home/erdk/workspace/c-ray/src/sphere.c:
+                //
+                //  sphere.c
+                //  C-Ray
+                //
+                //  Created by Valtteri Koskivuori on 28/02/15.
+                //  Copyright (c) 2015 Valtteri Koskivuori. All rights reserved.
+                //
+
+                #include "includes.h"
+                #include "sphere.h"
+
+           3 -> struct sphere newSphere(struct vector pos, double radius, int materialIndex) {
+                        return (struct sphere){pos, radius, materialIndex};
+                }
+
+                //Just check for intersection, nothing else.
+       ##### -> bool rayIntersectsWithSphereFast(struct lightRay *ray, struct sphere *sphere) {
+                        double A = scalarProduct(&ray->direction, &ray->direction);
+                        struct vector distance = subtractVectors(&ray->start, &sphere->pos);
+                        double B = 2 * scalarProduct(&ray->direction, &distance);
+                        double C = scalarProduct(&distance, &distance) - (sphere->radius * sphere->radius);
+                        double trigDiscriminant = B * B - 4 * A * C;
+                        if (trigDiscriminant < 0) {
+                                return false;
+                        } else {
+                                return true;
+                        }
+                }
+
+                //Calculates intersection with a sphere and a light ray
+    39921178 -> bool rayIntersectsWithSphere(struct lightRay *ray, struct sphere *sphere, double *t) {
+                        bool intersects = false;
+
+                        //Vector dot product of the direction
+                        double A = scalarProduct(&ray->direction, &ray->direction);
+
+                        //Distance between start of a lightRay and the sphere position
+                        struct vector distance = subtractVectors(&ray->start, &sphere->pos);
+
+                        double B = 2 * scalarProduct(&ray->direction, &distance);
+
+                        double C = scalarProduct(&distance, &distance) - (sphere->radius * sphere->radius);
+
+                        double trigDiscriminant = B * B - 4 * A * C;
+
+                        //If discriminant is negative, no real roots and the ray has missed the sphere
+                        if (trigDiscriminant < 0) {
+                                intersects = false;
+                        } else {
+                                double sqrtOfDiscriminant = sqrt(trigDiscriminant);
+                                double t0 = (-B + sqrtOfDiscriminant)/(2);
+                                double t1 = (-B - sqrtOfDiscriminant)/(2);
+
+                                //Pick closest intersection
+                                if (t0 > t1) {
+                                        t0 = t1;
+                                }
+
+                                //Verify intersection is larger than 0 and less than the original distance
+                                if ((t0 > 0.001f) && (t0 < *t)) {
+                                        *t = t0;
+                                        intersects = true;
+                                } else {
+                                        intersects = false;
+                                }
+                        }
+                        return intersects;
+                }
+
+
+Top 10 Lines:
+
+     Line      Count
+
+       31   39921178
+       12          3
+
+Execution Summary:
+
+        3   Executable lines in this file
+        3   Lines executed
+   100.00   Percent of the file executed
+
+ 39921181   Total number of line executions
+13307060.33   Average executions per line
+
+
+*** File /home/erdk/workspace/c-ray/src/main.c:
+
+```
+
+Used functions are annotated with 'num ->' prior to function definition, denoting number of executions. Also after each source file there's footer with statistics, the hot lines, execution summary and total number of executions.
 
 ## perf
+
+TODO: much better than gprof, faster execution, more detailed profile, easy to profile userspace app or kernel. Better tui. Con: annotation interleaves asm with C. Annotating with C only available when app compiled with '-g'.
+
+- perf stat bin/c-ray
+- perf record bin/c-ray
+- perf record --call-graph bin/c-ray
+- perf record -o \<filename> bin/c-ray
+- perf report
+- perf diff \<filename1> \<filename2>
+
+```bash
+$ perf recrod bin/c-ray
+```
+
+TODO: ncurses gui, how to use it, what's possible
 
 ## valgrind --tool=callgrind  
 
 Ex:
 
 ```bash
-$ valgrind --tool=callgrind ./hello
-$ callgrind_annotate
+$ valgrind --tool=callgrind bin/c-ray
+$ callgrind_annotate <callgrind.out.XXXXX>
 # or
 $ kcachegrind # (GUI in Qt)
 ```
@@ -64,10 +353,10 @@ $ kcachegrind # (GUI in Qt)
 
 ## lttng & babeltrace
 
-## blkin
-
 ## zipkin
 
 # Bonus round
 
 ## go pprof
+
+## blkin
