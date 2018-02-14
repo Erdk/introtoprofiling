@@ -1,5 +1,10 @@
 # Introduction to profiling
 
+1. "Throw against the wall and see what sticks"
+2. "Now we need a scalpel"
+3. Other tools
+4. Sources
+
 - [ ] Intorduction
 - [x] gprof
 - [ ] perf
@@ -9,6 +14,7 @@
 - [ ] zipkin
 - [ ] blkin
 - [ ] go pprof
+- [ ] Sources
 
 Clone repository and download submodules:
 
@@ -28,7 +34,7 @@ List of applications:
 - zipkin
 - go pprof
 
-# "Throw against the wall and see what sticks"
+# 1. "Throw against the wall and see what sticks"
 
 Both gprof, perf and callgrind (part of Valgrind suite) are relatively easy to use and there won't need any code changes. Thanks to that they're fast to enable them in your application get the overview what's going on, what are the most frequently called functions and in which functions application spends most of the time. The penalty for ease of use is performance hit related to the tracing of the whole application, and relatively low granuality. gprof is the oldest of those applications, I've included it because it widely available (maybe a bit for historical reasons). But if possible you'll be more satisified with using perf (in terms of functionality and performance) or valgrind (in terms of ease of use and correctness).
 
@@ -349,14 +355,27 @@ $ callgrind_annotate <callgrind.out.XXXXX>
 $ kcachegrind # (GUI in Qt)
 ```
 
-# "Sieve"
+## Summary
+
+TODO: which one is the fastest? Which one should be used in which case?
+
+# 2. "Scalpel"
 
 ## lttng & babeltrace
 
+# 3. Other tools
+
 ## zipkin
 
-# Bonus round
+## blkin
 
 ## go pprof
 
-## blkin
+# Sources
+
+- Gprof: https://www.thegeekstuff.com/2012/08/gprof-tutorial/
+- Gprof: `man gprof`
+- Perf: https://dev.to/etcwilde/perf---perfect-profiling-of-cc-on-linux-of
+- Valgrind: http://valgrind.org/docs/manual/cl-manual.html
+- (Q|K)cachegrind: https://github.com/KDE/kcachegrind
+- LTTNG: https://lttng.org/docs/v2.10/#doc-what-is-tracing
