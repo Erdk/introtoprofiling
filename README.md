@@ -27,19 +27,19 @@ $ cd introtoprofiling
 $ git submodule update --init
 ```
 
-List of applications and libraries:
+After (or before) clonnig repository install applications and libraries from this list:
 
-- gprof
-- perf
-- valgrind --tool=callgrind
-- lttng & babeltrace
-- blkin
-- zipkin
-- go pprof
+- gprof (should be in distro repo)
+- perf (should be in distro repo)
+- valgrind (should be in distro repo)
+- lttng & babeltrace (if not available from repo check here: http://lttng.org/download/ for download instructions)
+- blkin (`git clone https://github.com/ceph/blkin`)
+- zipkin (`docker run -d -p 9411:9411 openzipkin/zipkin` or `wget -O zipkin.jar 'https://search.maven.org/remote_content?g=io.zipkin.java&a=zipkin-server&v=LATEST&c=exec' && java -jar zipkin.jar`)
+- (optional) go pprof
 
 # 1. "Throw against the wall and see what sticks"
 
-Gprof, perf and callgrind (part of Valgrind suite) are relatively easy to use without any changes to the code. Thanks to this it's easy to use them with your application to get an overview on what's going on, what are the most frequently called functions and in which functions application spends most of the time. The penalty for ease of use is performance hit related to the tracing of the whole application, and relatively low granularity. gprof is the oldest of those applications, I've included it because it widely available (and maybe because of historical reasons). But if it's possible you'll be more satisfied with using perf (in terms of functionality and performance) or valgrind (in terms of ease of use and correctness).
+`gprof`, `perf` and `callgrind` (part of `valgrind` suite) are relatively easy to use without any changes to the code. Thanks to this it's easy to use them with your application to get an overview on what's going on, what are the most frequently called functions and in which functions application spends most of the time. The penalty for ease of use is performance hit related to the tracing of the whole application, and relatively low granularity. `gprof` is the oldest of those applications, I've included it because it widely available (and maybe because of historical reasons). Most likely you'll be more satisfied with `perf` (in terms of functionality and performance) or with `valgrind`, when 100% correctness of the result is more important than execution time.
 
 Each of those tools produces three types of results:
 
@@ -57,19 +57,19 @@ Pros:
 
 Cons:
 
-gprof & perf: 
+`gprof` & `perf`: 
 
 - the computed time and number of function calls are statistical, both of the programs check callstack at fixed time spans,
 - lower granuality than lttng,
 - adds overhead.
 
-callgrind: 
+`callgrind`: 
 
--  tracks every call, so performance could be very low, in applications relying on network connections could led to timeouts and abnormal program behavior.
+-  executes code on simulatr @ single CPU core, tracks every call, so performance could be very low, in applications relying on network connections could led to timeouts and abnormal program behavior.
 
 ## gprof
 
-Simple tool, very easy way to enable: add '-pg' to to CFLAGS and LDFLAGS (at compiling and linking stages). Also, with recent GCC versions you've also must add '--no-pie -fPIC' to the compiler options for it to work. Key advantage here is no need to add new code (apart from Makefile). In directory 'c-ray' you could test gprof:
+Simple tool, very easy way to enable: add '-pg' to to CFLAGS and LDFLAGS (at compiling and linking stages). Also, with recent GCC versions you've also must add '--no-pie -fPIC' to the compiler options for it to work. Key advantage here is no need to add new code (apart from Makefile). In directory `c-ray` you could test `gprof`:
 
 ```bash
 $ cd introtoprofiling/c-ray
@@ -82,7 +82,7 @@ This would create binary 'bin/c-ray-prof'. After executing it:
 $ bin/c-ray-prof
 ```
 
-There will be a new file in the directory: 'gmon.out'. With 'gprof' executable you could inspect the results.
+There will be a new file in the directory: `gmon.out`. With `gprof` executable you could inspect the results.
 
 ```bash
 $ gprof bin/c-ray-prof gmon.out | less
@@ -232,7 +232,7 @@ index % time    self  children    called     name
 ...
 ```
 
-Last, but not least: gprof could annotate source file with profile information. As symspec the best is to choose file (e.g. render.c) to have annotated source file and files with callees:
+Last, but not least: `gprof` could annotate source file with profile information. As symspec the best is to choose file (e.g. render.c) to have annotated source file and files with callees:
 
 ```C
 $ gprof -b -Arender.c bin/c-ray-prof gmon.out | less
@@ -416,7 +416,7 @@ And using `callgrind_control -i on|off` you could turn on or off instrumentation
 
 ## Summary
 
-Below are total times of execution for gprof, perf and callgrind. Only one run, results measured with 'time', just to show how roughly those execution times differ. For obvious reasons there were differences in compilation options of our application:
+Below are total times of execution for `gprof`, `perf` and `callgrind`. Only one run, results measured with `time`, just to show how roughly those execution times differ. For obvious reasons there were differences in compilation options of our application:
 
 - gprof: -O2 -g -pg --no-pie -fPIC
 - perf: -O2 -g
@@ -439,18 +439,16 @@ Keep in mind that despite that `callgrind` took less seconds than `gprof` total 
 
 # 3. Other tools
 
-## zipkin
-
-## blkin
+## zipkin && blkin
 
 ## go pprof
 
 # Sources
 
-- Gprof: https://www.thegeekstuff.com/2012/08/gprof-tutorial/
-- Gprof: `man gprof`
-- Perf: https://dev.to/etcwilde/perf---perfect-profiling-of-cc-on-linux-of
-- Perf: https://perf.wiki.kernel.org/index.php/Tutorial
-- Valgrind: http://valgrind.org/docs/manual/cl-manual.html
+- gprof: https://www.thegeekstuff.com/2012/08/gprof-tutorial/
+- gprof: `man gprof`
+- perf: https://dev.to/etcwilde/perf---perfect-profiling-of-cc-on-linux-of
+- perf: https://perf.wiki.kernel.org/index.php/Tutorial
+- valgrind: http://valgrind.org/docs/manual/cl-manual.html
 - (Q|K)cachegrind: https://github.com/KDE/kcachegrind
 - LTTNG: https://lttng.org/docs/v2.10/#doc-what-is-tracing
