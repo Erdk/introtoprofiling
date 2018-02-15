@@ -36,7 +36,7 @@ List of applications:
 
 # 1. "Throw against the wall and see what sticks"
 
-Both gprof, perf and callgrind (part of Valgrind suite) are relatively easy to use and there won't need any code changes. Thanks to that they're fast to enable them in your application get the overview what's going on, what are the most frequently called functions and in which functions application spends most of the time. The penalty for ease of use is performance hit related to the tracing of the whole application, and relatively low granuality. gprof is the oldest of those applications, I've included it because it widely available (maybe a bit for historical reasons). But if possible you'll be more satisified with using perf (in terms of functionality and performance) or valgrind (in terms of ease of use and correctness).
+Gprof, perf and callgrind (part of Valgrind suite) are relatively easy to use without any changes to the code. Thanks to this it's easy to use them with your application to get an overview on what's going on, what are the most frequently called functions and in which functions application spends the most of the time. The penalty for ease of use is performance hit related to the tracing of the whole application, and relatively low granuality. gprof is the oldest of those applications, I've included it because it widely available (and maybe beacause of historical reasons). But if it's possible you'll be more satisified with using perf (in terms of functionality and performance) or valgrind (in terms of ease of use and correctness).
 
 Each of those tools produces three types o results:
 
@@ -48,15 +48,15 @@ Each of those tools produces three types o results:
 
 Pros:
 
-- fast to enable and use,
+- easy to enable and use,
 - all of the tools gave good image of where could be possible hotspots, which functions are called the most and which functions are the most expensive computionally.
 
 Cons:
 
 gprof & perf: 
 
-- the computed time and number of function calls are statistical, both of the programs checks callstack at "ticks"
-- low granuality (compared to lttng),
+- the computed time and number of function calls are statistical, both of the programs checks callstack at fixed time spans,
+- lower granuality than lttng,
 - adds overhead.
 
 callgrind: 
@@ -78,7 +78,7 @@ This would create binary 'bin/c-ray-prof'. After executing it:
 $ bin/c-ray-prof
 ```
 
-There will be new file in directory: 'gmon.out'. With 'gprof' executable you could inspect the results.
+There will be a new file in the directory: 'gmon.out'. With 'gprof' executable you could inspect the results.
 
 ```bash
 $ gprof bin/c-ray-prof gmon.out | less
@@ -329,22 +329,33 @@ Used functions are annotated with 'num ->' prior to function definition, denotin
 
 ## perf
 
-TODO: much better than gprof, faster execution, more detailed profile, easy to profile userspace app or kernel. Better tui. Con: annotation interleaves asm with C. Annotating with C only available when app compiled with '-g'.
+TODO: much better than gprof, faster execution, more detailed profile, easy to profile userspace app or kernel. Better tui. Con: annotation interleaves asm with C. Annotating with C only available when app was compiled with debug information.
 
-- perf stat bin/c-ray
-- perf record bin/c-ray
-- perf record --call-graph bin/c-ray
-- perf record -o \<filename> bin/c-ray
-- perf report
+To get trace you have to run `perf record <path to executable>`:
+- Just flat profile (default): `perf record bin/c-ray`
+- Flat profile + call graph: `perf record --call-graph bin/c-ray`
+
+### perf report (tui)
+
+Main window:
+![perf main window](/img/perf1.png)
+
+To get help press 'h':
+![perf help window](/img/perf2.png)
+
+Select function with arrow keys and press 'a' to go to the annotated view. Without debug information there will be only asm:
+![perf annotated asm](/img/perf3.png)
+
+When app was compiled with debug information asm code will be interleaved with C code:
+![perf annotated asm and C](/img/perf4.png)
+
+
 - perf diff \<filename1> \<filename2>
-
-```bash
-$ perf recrod bin/c-ray
 ```
 
-TODO: ncurses gui, how to use it, what's possible
-
 ## valgrind --tool=callgrind  
+
+Compile optimized and with debug information. 
 
 Ex:
 
@@ -354,10 +365,64 @@ $ callgrind_annotate <callgrind.out.XXXXX>
 # or
 $ kcachegrind # (GUI in Qt)
 ```
+With `callgrind` there also comes `callgrind_control`, tool which allows to inspect application during run. 
+
+Quick stats:
+```bash
+$  callgrind_control -s
+PID 22710: bin/c-ray
+sending command status internal to pid 22710
+  Number of running threads: 9, thread IDs: 1 2 3 4 5 6 7 8 9
+  Events collected: Ir
+  Functions: 575 (executed 3,805,993,131, contexts 575)
+  Basic blocks: 5,681 (executed 31,519,541,333, call sites 1,252)
+```
+
+Inspect backtrace:
+```bash
+$ callgrind_control -b|head -n 30
+PID 22710: bin/c-ray
+sending command status internal to pid 22710
+
+  Frame: Backtrace for Thread 1
+   [ 0]  nanosleep (843 x)
+   [ 1]  usleep (842 x)
+   [ 2]  sleepMSec (843 x)
+   [ 3]  main (1 x)
+   [ 4]  (below main) (1 x)
+   [ 5]  _start (1 x)
+   [ 6]  0x0000000000000ed0
+
+
+  Frame: Backtrace for Thread 2
+   [ 0]  subtractVectors (289348042 x)
+   [ 1]  rayIntersectsWithPolygon (289348055 x)
+   [ 2]  rayIntersectsWithNode (25762561 x)
+   [ 3]  rayIntersectsWithNode (128149695 x)
+   [ 4]  getClosestIsect (3052621 x)
+   [ 5]  newTrace (3052621 x)
+   [ 6]  renderThread (8 x)
+   [ 7]  start_thread (8 x)
+   [ 8]  clone
+...
+```
+
+And using `callgrind_control -i on|off` you could turn on or off instrumentation during runtime.
 
 ## Summary
 
 TODO: which one is the fastest? Which one should be used in which case?
+
+Below are total times of execution for gprof, perf , callgrind. Only one run, results measured with 'time', just to show how roughly thsoe execution times differ. For obvious reasons there were differences in compilation options:
+
+- gprof: -g -pg --no-pie -fPIC
+
+app                | time
+-------------------|--------
+gprof              | 5224.85s user 4.84s system 765% cpu 11:23.08 total
+perf (flat)        | 537.75s user 37.73s system 738% cpu 1:17.92 total
+perf (flat + call) | 537.25s user 37.97s system 737% cpu 1:17.97 total
+callgrind          | ... still running ...
 
 # 2. "Scalpel"
 
@@ -376,6 +441,7 @@ TODO: which one is the fastest? Which one should be used in which case?
 - Gprof: https://www.thegeekstuff.com/2012/08/gprof-tutorial/
 - Gprof: `man gprof`
 - Perf: https://dev.to/etcwilde/perf---perfect-profiling-of-cc-on-linux-of
+- Perf: https://perf.wiki.kernel.org/index.php/Tutorial
 - Valgrind: http://valgrind.org/docs/manual/cl-manual.html
 - (Q|K)cachegrind: https://github.com/KDE/kcachegrind
 - LTTNG: https://lttng.org/docs/v2.10/#doc-what-is-tracing
