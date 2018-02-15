@@ -372,9 +372,9 @@ $ kcachegrind # (GUI in Qt)
 ```
 With `callgrind` there also comes `callgrind_control`, tool which allows to inspect application during run. 
 
-Quick stats:
+To get quick statistics about running application:
 ```bash
-$  callgrind_control -s
+$  callgrind_control -s 22710
 PID 22710: bin/c-ray
 sending command status internal to pid 22710
   Number of running threads: 9, thread IDs: 1 2 3 4 5 6 7 8 9
@@ -385,7 +385,7 @@ sending command status internal to pid 22710
 
 Inspect backtrace:
 ```bash
-$ callgrind_control -b|head -n 30
+$ callgrind_control -b 22710 |head -n 30
 PID 22710: bin/c-ray
 sending command status internal to pid 22710
 
@@ -412,7 +412,7 @@ sending command status internal to pid 22710
 ...
 ```
 
-And using `callgrind_control -i on|off` you could turn on or off instrumentation during runtime. You could match it
+With `callgrind_control -i on|off` you could turn on or off instrumentation during runtime. You could combine it with `--instr-atstart=no|yes` option to `valgrind` when you start application, to start without instrumentation, then turn it on for a few minutes to gather profile and then turn it off again.
 
 ## Summary
 
