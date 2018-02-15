@@ -340,7 +340,9 @@ To get trace you have to run `perf record <path to executable>`:
 - Just flat profile (default): `perf record bin/c-ray`
 - Flat profile + call graph: `perf record --call-graph bin/c-ray`
 
-### perf report (tui)
+### perf report
+
+`$ perf report`
 
 Main window:
 ![perf main window](/img/perf1.png)
@@ -354,8 +356,19 @@ Select function with arrow keys and press 'a' to go to the annotated view. Witho
 When app was compiled with debug information asm code will be interleaved with C code:
 ![perf annotated asm and C](/img/perf4.png)
 
+GTK2 interface:
+`perf report --gtk`
 
-- perf diff \<filename1> \<filename2>
+### perf diff \<filename1> \<filename2>
+
+`perf diff \<filename1> \<filename2>` compares to perf files.
+TODO: screenshot, fedora by default doesn't include support for this
+
+### perf data convert --to-ctf <path>
+  
+  convert native perf data format to CTF, understandable by babeltrace, kcachegrind.
+  TODO: example, fedora by default doesn't include support for this
+
 ```
 
 ## valgrind --tool=callgrind  
@@ -414,6 +427,17 @@ sending command status internal to pid 22710
 
 With `callgrind_control -i on|off` you could turn on or off instrumentation during runtime. You could combine it with `--instr-atstart=no|yes` option to `valgrind` when you start application, to start without instrumentation, then turn it on for a few minutes to gather profile and then turn it off again.
 
+You could also inspect profile data with KCacheGrind. It provides graphical interface and it provides visualization of data, which helps with analysis. It's available for Linux, and probobly for Windows as QCacheGrind (I saw old builds on sourceforge but I didn't test them...).
+
+List of callers and callees of choosen function:
+![kcachegrind callers and callees](/img/kcachegrind1.png)
+
+All callers and call graph:
+![kcachegrind all callers and call graph](/img/kcachegrind2.png)
+
+Visual maps of execution time:
+![kcachegrind maps](/img/kcachegrind3.png)
+
 ## Summary
 
 Below are total times of execution for `gprof`, `perf` and `callgrind`. Only one run, results measured with `time`, just to show how roughly those execution times differ. For obvious reasons there were differences in compilation options of our application:
@@ -431,7 +455,7 @@ perf (flat)        | 309.79s user 86.39s system 725% cpu 54.629 total
 perf (flat + call) | 299.25s user 90.70s system 719% cpu 54.199 total
 callgrind (-02 -g) | 4699.96s user 17.50s system 100% cpu 1:18:30.59 total
 
-Keep in mind that despite that `callgrind` took less seconds than `gprof` total execution time was much longer. Code instrumented with `gprof` runs directly on CPU, when with `callgrind` inside `valgrind`'s simulator, which runs on single CPU and serializes all ops. The fastest of all three was `perf`, and in my opinion is the best option to use. If for some reason you couldn't run `perf` (e.g. you couldn't prepend command) the next option would be `gprof`. `callgrind` could be used if you really, **really** need not statistical aproximation but 100% correct profile. Given the methodology I propose here (get rough idea what's going on and then use other tools to inspect specific codepaths) I don't think it would be a good match for this stage.
+Keep in mind that despite that `callgrind` took less seconds than `gprof` total execution time was much longer. Code instrumented with `gprof` runs directly on CPU, when with `callgrind` inside `valgrind`'s simulator, which runs on single CPU and serializes all ops. The fastest of all three was `perf`, and in my opinion is the best option to use. If for some reason you couldn't run `perf` (e.g. you couldn't prepend command) the next option would be `gprof`. `callgrind` could be used if you really, **really** need 100% accurate profile. Given the methodology I propose here (get rough idea what's going on and then use other tools to inspect specific codepaths) I don't think it would be a good match for this stage.
 
 # 2. "Scalpel"
 
