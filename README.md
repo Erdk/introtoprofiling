@@ -8,7 +8,7 @@
 - [ ] Intorduction
 - [x] gprof
 - [ ] perf
-- [ ] valgrind
+- [x] valgrind
 - [x] stg. 1 summary
 - [ ] lltng
 - [ ] babeltrace
@@ -237,7 +237,7 @@ Last, but not least: `gprof` could annotate source file with profile information
 ```C
 $ gprof -b -Arender.c bin/c-ray-prof gmon.out | less
 ...
-*** File /home/erdk/workspace/c-ray/src/sphere.c:
+*** File .../c-ray/src/sphere.c:
                 //
                 //  sphere.c
                 //  C-Ray
@@ -325,7 +325,7 @@ Execution Summary:
 13307060.33   Average executions per line
 
 
-*** File /home/erdk/workspace/c-ray/src/main.c:
+*** File .../c-ray/src/main.c:
 
 ```
 
@@ -373,16 +373,98 @@ TODO: screenshot, fedora by default doesn't include support for this
 
 ## valgrind --tool=callgrind  
 
-Compile optimized and with debug information. 
+Similarily to previous tools `callgrind` doesn't require changes to the code, it's sufficient to compile with optimizations and debug information turned on. Contrary to `gprof` and `perf` it doesn't run code directly on host CPU, but via it's own simulator. This allow  
 
-Ex:
-
+To gather profile:
 ```bash
 $ valgrind --tool=callgrind bin/c-ray
-$ callgrind_annotate <callgrind.out.XXXXX>
-# or
-$ kcachegrind # (GUI in Qt)
 ```
+
+To inspect flat profile:
+```
+$ callgrind_annotate callgrind.out.13671                                 
+--------------------------------------------------------------------------------                  
+Profile data file 'callgrind.out.13671' (creator: callgrind-3.13.0)                               
+--------------------------------------------------------------------------------                  
+I1 cache:                                                                                         
+D1 cache:                                                                                         
+LL cache:                                                                                         
+Timerange: Basic block 0 - 119733969377                                                           
+Trigger: Program termination                                                                      
+Profiled target:  bin/c-ray (PID 13671, part 1)                                                   
+Events recorded:  Ir                                                                              
+Events shown:     Ir                                                                              
+Event sort order: Ir                                                                              
+Thresholds:       99                                                                              
+Include dirs:                                                                                     
+User annotated:                                                                                   
+Auto-annotation:  off                                                                             
+                                                                                                  
+--------------------------------------------------------------------------------                  
+             Ir                                                                                   
+--------------------------------------------------------------------------------                  
+936,450,558,371  PROGRAM TOTALS                                                                   
+                                                                                                  
+--------------------------------------------------------------------------------                  
+             Ir  file:function                                                                    
+--------------------------------------------------------------------------------
+
+238,763,680,382  .../c-ray/src/bbox.c:rayIntersectWithAABB [.../c-ray/
+bin/c-ray]                  
+168,001,295,859  .../c-ray/src/raytrace.c:rayIntersectsWithNode'2 [...
+/c-ray/bin/c-ray]                  
+158,259,872,671  .../c-ray/src/poly.c:rayIntersectsWithPolygon [.../c-
+ray/bin/c-ray]
+...
+```
+
+`I1 cache`, `D1 cache`, `LL cache` refers to simulated CPU caches, in this example we didn't turn option to gather them so there's no data here.
+
+With switch `--tree=<mode>` you could turn on information about call graph: `caller`, `calling`, and `both`:
+
+```
+$ callgrind_annotate --tree=caller callgrind.out.13671
+...
+187,684,131,006  < .../c-ray/src/raytrace.c:rayIntersectsWithNode'2 (3842892764x)
+ [.../c-ray/bin/c-ray]
+ 51,079,549,376  < .../c-ray/src/raytrace.c:rayIntersectsWithNode (1060050002x) [
+.../c-ray/bin/c-ray]
+238,763,680,382  *  .../c-ray/src/bbox.c:rayIntersectWithAABB [.../c-r
+ay/bin/c-ray]
+...
+```
+
+```
+$ callgrind_annotate --tree=caller callgrind.out.13671
+...
+238,763,680,382  *  .../c-ray/src/bbox.c:rayIntersectWithAABB [.../c-r
+ay/bin/c-ray]
+
+168,001,295,859  *  .../c-ray/src/raytrace.c:rayIntersectsWithNode'2 [.../c-ray/bin/c-ray]
+346,471,804,141  >   .../c-ray/src/poly.c:rayIntersectsWithPolygon (2027649930x) [.../c-ray/bin/c-ray]                   
+  1,206,571,355  >   .../c-ray/src/vector.c:vectorScale (109688305x) [.../c-ray/bin/c-ray]
+187,684,131,006  >   .../c-ray/src/bbox.c:rayIntersectWithAABB (3842892764x) [.../c-ray/bin/c-ray]
+Negative repeat count does nothing at /usr/bin/callgrind_annotate line 828.
+3,118,318,860,534  >   .../c-ray/src/raytrace.c:rayIntersectsWithNode'2 (3488504364x) [.../c-ray/bin/c-ray]
+  1,316,259,660  >   .../c-ray/src/vector.c:addVectors (109688305x) [.../c-ray/bin/c-ray]
+...
+```
+
+```
+$ callgrind_annotate --tree=both callgrind.out.13671
+...
+3,118,318,860,534  < .../c-ray/src/raytrace.c:rayIntersectsWithNode'2 (3488504364x) [.../c-ray/bin/c-ray]                                                      
+704,680,062,021  < .../c-ray/src/raytrace.c:rayIntersectsWithNode (354388400x) [.../c-ray/bin/c-ray]                                                           
+168,001,295,859  *  .../c-ray/src/raytrace.c:rayIntersectsWithNode'2 [.../c-ray/bin/c-ray]                                                                     
+Negative repeat count does nothing at /usr/bin/callgrind_annotate line 828.                                                                                                                
+3,118,318,860,534  >   .../c-ray/src/raytrace.c:rayIntersectsWithNode'2 (3488504364x) [.../c-ray/bin/c-ray]                                                    
+187,684,131,006  >   .../c-ray/src/bbox.c:rayIntersectWithAABB (3842892764x) [.../c-ray/bin/c-ray]                                                             
+  1,316,259,660  >   .../c-ray/src/vector.c:addVectors (109688305x) [.../c-ray/bin/c-ray]                                                                      
+  1,206,571,355  >   .../c-ray/src/vector.c:vectorScale (109688305x) [.../c-ray/bin/c-ray]                                                                     
+346,471,804,141  >   .../c-ray/src/poly.c:rayIntersectsWithPolygon (2027649930x) [.../c-ray/bin/c-ray]
+...
+```
+
 With `callgrind` there also comes `callgrind_control`, tool which allows to inspect application during run. 
 
 To get quick statistics about running application:
@@ -427,7 +509,7 @@ sending command status internal to pid 22710
 
 With `callgrind_control -i on|off` you could turn on or off instrumentation during runtime. You could combine it with `--instr-atstart=no|yes` option to `valgrind` when you start application, to start without instrumentation, then turn it on for a few minutes to gather profile and then turn it off again.
 
-You could also inspect profile data with KCacheGrind. It provides graphical interface and it provides visualization of data, which helps with analysis. It's available for Linux, and probobly for Windows as QCacheGrind (I saw old builds on sourceforge but I didn't test them...).
+It's possible to base analysis on `callgrind_annotate` output, but better suited to this is KCacheGrind. It provides graphical interface and it provides visualization of data, which helps with analysis. It's available for Linux, and probobly for Windows as QCacheGrind (I saw old builds on sourceforge but I didn't test them...).
 
 List of callers and callees of choosen function:
 ![kcachegrind callers and callees](/img/kcachegrind1.png)
