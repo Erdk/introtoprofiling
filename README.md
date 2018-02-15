@@ -1,23 +1,28 @@
 # Introduction to profiling
 
-1. "Throw against the wall and see what sticks"
-2. "Now we need a scalpel"
-3. Other tools
-4. Sources
+## Table of contents
+<!--ts-->
+* [Get sources](#get-sources)
+* [Introduction](#introduction)
+* [Throw against the wall and see what sticks](#throw-against-the-wall-and-see-what-sticks)
+    * [x] [Pros & cons](#pros--cons)
+    * [x] [gprof](#gprof)
+    * [perf](#perf)
+        * [x][perf report](#perf-report)
+        * [perf diff \<filename1> \<filename2>](#perf-diff-filename1-filename2)
+        * [perf data](#perf-data-convert---to-ctf-)
+    * [x][callgrind](#callgrind)
+        * [x][kcachegrind](#kcachegrind)
+    * [x][summary](#summary)
+* ["Scalpel"](#scalpel)
+    * [lttng & babeltrace](#lttng--babeltrace)
+    * [zipkin & blkin](#zipkin--blkin)
+* [Other tools](#other-tools)
+    * [go prof](#go-prof)
+* [x] [Sources](#sources)
+<!--ts-->
 
-- [ ] Intorduction
-- [x] gprof
-- [ ] perf
-- [x] valgrind
-- [x] stg. 1 summary
-- [ ] lltng
-- [ ] babeltrace
-- [ ] stg 2. summary
-- [ ] zipkin
-- [ ] blkin
-- [ ] go pprof
-- [ ] stg. 3 summary
-- [ ] Sources
+# Get sources
 
 Clone repository and download submodules:
 
@@ -37,7 +42,9 @@ After (or before) clonnig repository install applications and libraries from thi
 - zipkin (`docker run -d -p 9411:9411 openzipkin/zipkin` or `wget -O zipkin.jar 'https://search.maven.org/remote_content?g=io.zipkin.java&a=zipkin-server&v=LATEST&c=exec' && java -jar zipkin.jar`)
 - (optional) go pprof
 
-# 1. "Throw against the wall and see what sticks"
+# Introduction
+
+# "Throw against the wall and see what sticks"
 
 `gprof`, `perf` and `callgrind` (part of `valgrind` suite) are relatively easy to use without any changes to the code. Thanks to this it's easy to use them with your application to get an overview on what's going on, what are the most frequently called functions and in which functions application spends most of the time. The penalty for ease of use is performance hit related to the tracing of the whole application, and relatively low granularity. `gprof` is the oldest of those applications, I've included it because it widely available (and maybe because of historical reasons). Most likely you'll be more satisfied with `perf` (in terms of functionality and performance) or with `valgrind`, when 100% correctness of the result is more important than execution time.
 
@@ -369,9 +376,7 @@ TODO: screenshot, fedora by default doesn't include support for this
   convert native perf data format to CTF, understandable by babeltrace, kcachegrind.
   TODO: example, fedora by default doesn't include support for this
 
-```
-
-## valgrind --tool=callgrind  
+## callgrind
 
 Similarily to previous tools `callgrind` doesn't require changes to the code, it's sufficient to compile with optimizations and debug information turned on. Contrary to `gprof` and `perf` it doesn't run code directly on host CPU, but via it's own simulator. This allow  
 
@@ -509,6 +514,8 @@ sending command status internal to pid 22710
 
 With `callgrind_control -i on|off` you could turn on or off instrumentation during runtime. You could combine it with `--instr-atstart=no|yes` option to `valgrind` when you start application, to start without instrumentation, then turn it on for a few minutes to gather profile and then turn it off again.
 
+### kcachegrind
+
 It's possible to base analysis on `callgrind_annotate` output, but better suited to this is KCacheGrind. It provides graphical interface and it provides visualization of data, which helps with analysis. It's available for Linux, and probobly for Windows as QCacheGrind (I saw old builds on sourceforge but I didn't test them...).
 
 List of callers and callees of choosen function:
@@ -539,13 +546,13 @@ callgrind (-02 -g) | 4699.96s user 17.50s system 100% cpu 1:18:30.59 total
 
 Keep in mind that despite that `callgrind` took less seconds than `gprof` total execution time was much longer. Code instrumented with `gprof` runs directly on CPU, when with `callgrind` inside `valgrind`'s simulator, which runs on single CPU and serializes all ops. The fastest of all three was `perf`, and in my opinion is the best option to use. If for some reason you couldn't run `perf` (e.g. you couldn't prepend command) the next option would be `gprof`. `callgrind` could be used if you really, **really** need 100% accurate profile. Given the methodology I propose here (get rough idea what's going on and then use other tools to inspect specific codepaths) I don't think it would be a good match for this stage.
 
-# 2. "Scalpel"
+# "Scalpel"
 
 ## lttng & babeltrace
 
-# 3. Other tools
-
 ## zipkin && blkin
+
+# Other tools
 
 ## go pprof
 
