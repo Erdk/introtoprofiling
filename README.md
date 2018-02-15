@@ -8,12 +8,12 @@
     * [x] [Pros & cons](#pros--cons)
     * [x] [gprof](#gprof)
     * [perf](#perf)
-        * [x][perf report](#perf-report)
+        * [x] [perf report](#perf-report)
         * [perf diff \<filename1> \<filename2>](#perf-diff-filename1-filename2)
         * [perf data](#perf-data-convert---to-ctf-)
-    * [x][callgrind](#callgrind)
-        * [x][kcachegrind](#kcachegrind)
-    * [x][summary](#summary)
+    * [x] [callgrind](#callgrind)
+        * [x] [kcachegrind](#kcachegrind)
+    * [x] [summary](#summary)
 * ["Scalpel"](#scalpel)
     * [lttng & babeltrace](#lttng--babeltrace)
     * [zipkin & blkin](#zipkin--blkin)
@@ -550,7 +550,7 @@ Keep in mind that despite that `callgrind` took less seconds than `gprof` total 
 
 ## lttng & babeltrace
 
-## zipkin && blkin
+## zipkin & blkin
 
 # Other tools
 
