@@ -9,11 +9,14 @@
 - [x] gprof
 - [ ] perf
 - [ ] valgrind
+- [x] stg. 1 summary
 - [ ] lltng
 - [ ] babeltrace
+- [ ] stg 2. summary
 - [ ] zipkin
 - [ ] blkin
 - [ ] go pprof
+- [ ] stg. 3 summary
 - [ ] Sources
 
 Clone repository and download submodules:
@@ -24,7 +27,7 @@ $ cd introtoprofiling
 $ git submodule update --init
 ```
 
-List of applications:
+List of applications and libraries:
 
 - gprof
 - perf
@@ -36,9 +39,10 @@ List of applications:
 
 # 1. "Throw against the wall and see what sticks"
 
-Gprof, perf and callgrind (part of Valgrind suite) are relatively easy to use without any changes to the code. Thanks to this it's easy to use them with your application to get an overview on what's going on, what are the most frequently called functions and in which functions application spends the most of the time. The penalty for ease of use is performance hit related to the tracing of the whole application, and relatively low granuality. gprof is the oldest of those applications, I've included it because it widely available (and maybe beacause of historical reasons). But if it's possible you'll be more satisified with using perf (in terms of functionality and performance) or valgrind (in terms of ease of use and correctness).
+Gprof, perf and callgrind (part of Valgrind suite) are relatively easy to use without any changes to the code. Thanks to this it's easy to use them with your application to get an overview on what's going on, what are the most frequently called functions and in which functions application spends most of the time. The penalty for ease of use is performance hit related to the tracing of the whole application, and relatively low granularity. gprof is the oldest of those applications, I've included it because it widely available (and maybe because of historical reasons). But if it's possible you'll be more satisfied with using perf (in terms of functionality and performance) or valgrind (in terms of ease of use and correctness).
 
-Each of those tools produces three types o results:
+Each of those tools produces three types of results:
+
 
 - flat profile: shows how much time your program spent in each function, and how many times that function was called. As the name suggests on this view you won't see any relation between functions,
 - call graph: for each function shows which functions called it, which other functions was called by it, and how many times. There is also an estimate of how much time was spent in the subroutines of each function.
@@ -49,23 +53,23 @@ Each of those tools produces three types o results:
 Pros:
 
 - easy to enable and use,
-- all of the tools gave good image of where could be possible hotspots, which functions are called the most and which functions are the most expensive computionally.
+- all the tools gave good image of where could be possible hotspots, which functions are called the most and which functions are the most expensive computationally.
 
 Cons:
 
 gprof & perf: 
 
-- the computed time and number of function calls are statistical, both of the programs checks callstack at fixed time spans,
+- the computed time and number of function calls are statistical, both of the programs check callstack at fixed time spans,
 - lower granuality than lttng,
 - adds overhead.
 
 callgrind: 
 
--  tracks every call, so performance could be very low, in applications relying on network connections could led to timeouts and abnormal program behaviour.
+-  tracks every call, so performance could be very low, in applications relying on network connections could led to timeouts and abnormal program behavior.
 
 ## gprof
 
-Simple tool, very easy way to enable: add '-pg' to to CFLAGS and LDFLAGS (at compiling and linking stages). Also, with recent GCC versions you've also have to add '--no-pie -fPIC' to the compiler options for it to work. Key advantage here is no need to add new code (apart from Makefile). In directory 'c-ray' you could test gprof:
+Simple tool, very easy way to enable: add '-pg' to to CFLAGS and LDFLAGS (at compiling and linking stages). Also, with recent GCC versions you've also must add '--no-pie -fPIC' to the compiler options for it to work. Key advantage here is no need to add new code (apart from Makefile). In directory 'c-ray' you could test gprof:
 
 ```bash
 $ cd introtoprofiling/c-ray
@@ -84,7 +88,7 @@ There will be a new file in the directory: 'gmon.out'. With 'gprof' executable y
 $ gprof bin/c-ray-prof gmon.out | less
 ```
 
-You should see something similar to this:
+You should see something like this:
 
 ```
 Flat profile:
@@ -103,7 +107,7 @@ Each sample counts as 0.01 seconds.
 ...
 ```
 
-The output is relatively long, after each section there's lengthy description of columns. To supress it run grof with '-b' (brief), but I encourage you to read it at least once ;) 
+The output is relatively long, after each section there's lengthy description of columns. To suppress it run grof with '-b' (brief), but I encourage you to read it at least once ;) 
 
 Now we get to options which could help us with analysis. When you only want to inspect flat profile use '-p' switch:
 
@@ -151,9 +155,9 @@ Each sample counts as 0.01 seconds.
   9.35    193.60    23.94  8180655     0.00     0.00  getClosestIsect
 ```
 
-When you compare with previous example you could see, that all values were adjusted. This could be useful when you want to exclude function you coudn't optimize and want to have a closer look on other potential candidates for optimization.
+When you compare with previous example you could see, that all values were adjusted. This could be useful when you want to exclude function you couldn't optimize and want to have a closer look on other potential candidates for optimization.
 
-In similar way you could inspect call graphs. To do this use '-q' and '-Q' switches. First dispaly ony call graph:
+In similar way you could inspect call graphs. To do this use '-q' and '-Q' switches. First display ony call graph:
 
 ```bash
 $ gprof -b -q bin/c-ray-prof gmon.out  | head -n 27
@@ -197,7 +201,7 @@ getClosestInsect | main function of this call graph
 rayIntersectsWithNode | function called by getClosestInsect
 rayIntersectsWithSphereTemp | function called by rayIntersectsWithNode
 
-Numbers in 'called' column denotes respectively number of calls in scope of the parent and number of total calls. Similarily to '-p' with '-q\<symspec>' you could inspect call graph of function you choose:
+Numbers in 'called' column denotes respectively number of calls in scope of the parent and number of total calls. Analogous to '-p' switch with '-q\<symspec>' you could inspect call graph of function you choose:
 
 ```bash
 $ gprof -b -qrayIntersectsWithNode bin/c-ray-prof gmon.out
@@ -228,7 +232,7 @@ index % time    self  children    called     name
 ...
 ```
 
-Last, but not least: gprof could annotate source file with profile information. As symspec the best is to choose file (e.g. render.c) to have annotated source file and files with calees:
+Last, but not least: gprof could annotate source file with profile information. As symspec the best is to choose file (e.g. render.c) to have annotated source file and files with callees:
 
 ```C
 $ gprof -b -Arender.c bin/c-ray-prof gmon.out | less
@@ -329,6 +333,7 @@ Used functions are annotated with 'num ->' prior to function definition, denotin
 
 ## perf
 
+Perf 
 TODO: much better than gprof, faster execution, more detailed profile, easy to profile userspace app or kernel. Better tui. Con: annotation interleaves asm with C. Annotating with C only available when app was compiled with debug information.
 
 To get trace you have to run `perf record <path to executable>`:
@@ -407,22 +412,26 @@ sending command status internal to pid 22710
 ...
 ```
 
-And using `callgrind_control -i on|off` you could turn on or off instrumentation during runtime.
+And using `callgrind_control -i on|off` you could turn on or off instrumentation during runtime. You could match it
 
 ## Summary
 
-TODO: which one is the fastest? Which one should be used in which case?
+Below are total times of execution for gprof, perf and callgrind. Only one run, results measured with 'time', just to show how roughly those execution times differ. For obvious reasons there were differences in compilation options of our application:
 
-Below are total times of execution for gprof, perf , callgrind. Only one run, results measured with 'time', just to show how roughly thsoe execution times differ. For obvious reasons there were differences in compilation options:
+- gprof: -O2 -g -pg --no-pie -fPIC
+- perf: -O2 -g
+- callgrind: -O2 -g
 
-- gprof: -g -pg --no-pie -fPIC
+`gprof` required the most changes, `perf` only requires `-g` when you want to see annotated code in C, not only in asm. `callgrind` requiers `-g` and `-O2`: first to gather required information, second to have semi-decent execution time. I've tested all with `-O2` because you **want** to run optimized executable to gather results as close to reality as possible.
 
 app                | time
 -------------------|--------
-gprof              | 5224.85s user 4.84s system 765% cpu 11:23.08 total
-perf (flat)        | 537.75s user 37.73s system 738% cpu 1:17.92 total
-perf (flat + call) | 537.25s user 37.97s system 737% cpu 1:17.97 total
-callgrind          | ... still running ...
+gprof              | 5119.32s user 5.38s system 762% cpu 11:12.00 total
+perf (flat)        | 309.79s user 86.39s system 725% cpu 54.629 total
+perf (flat + call) | 299.25s user 90.70s system 719% cpu 54.199 total
+callgrind (-02 -g) | 4699.96s user 17.50s system 100% cpu 1:18:30.59 total
+
+Keep in mind that despite that `callgrind` took less seconds than `gprof` total execution time was much longer. Code instrumented with `gprof` runs directly on CPU, when with `callgrind` inside `valgrind`'s simulator, which runs on single CPU and serializes all ops. The fastest of all three was `perf`, and in my opinion is the best option to use. If for some reason you couldn't run `perf` (e.g. you couldn't prepend command) the next option would be `gprof`. `callgrind` could be used if you really, **really** need not statistical aproximation but 100% correct profile. Given the methodology I propose here (get rough idea what's going on and then use other tools to inspect specific codepaths) I don't think it would be a good match for this stage.
 
 # 2. "Scalpel"
 
