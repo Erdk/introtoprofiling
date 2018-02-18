@@ -27,6 +27,11 @@
   When recording profile you could set custom name for filename, to do so run `perf record -o <filename> ...`
 - get systemwide realtime look at performance counters: `sudo perf top`
 - get realtime look at performance counters: `perf top -p <pid>`
+- generate flame graph:
+```bash
+$ perf record -g ./<exe>
+$ perf script | <path to FlameGraph>/stackcollapse-perf.pl | <path to FlameGraph>/flamegraph.pl > <filename>.svg
+```
 
 ## callgrind
 - compile with: `-O2 -g`
@@ -42,3 +47,66 @@
   To use `callgrind_control` application must be executed with `valgrind --tool=callgrind ...`
 - get realtime statistics: `callgrind_control -s <pid>`
 - get stack/back traces of running application: `callgrind_control -b <pid>`
+
+## lttng
+- create session: `lttng create <session name>`
+- list events: `lttng list -u`
+- enable event: `lttng enable-event -u <event provider>:<event name>`
+- start recording: `lttng start`
+- stop recording: `lttng stop`
+- view trace: `lttng view`
+- finish session (this **won't** erase data): `lttng destroy`
+- link against to enable: `-llttng-ust -ldl`
+- basic tracepoint: `tracef()` defined in `<lttng/tracef.h>`
+
+Basic trace:
+
+tr.h
+```H
+#undef TRACEPOINT_PROVIDER
+#define TRACEPOINT_PROVIDER cray
+
+#undef TRACEPOINT_INCLUDE
+#define TRACEPOINT_INCLUDE "./tp.h"
+
+#if !defined(_TP_H) || defined(TRACEPOINT_HEADER_MULTI_READ)
+#define _TP_H
+
+#include <lttng/tracepoint.h>
+
+TRACEPOINT_EVENT(
+  cray,
+  my_first_tracepoint,
+  TP_ARGS(
+    int, my_integer_arg,
+    char*, my_string_arg                                   ),
+
+  TP_FIELDS(
+    ctf_string(my_string_field, my_string_arg)
+    ctf_integer(int, my_integer_field, my_integer_arg)
+  )
+)
+
+#endif /* _TP_H */
+
+#include <lttng/tracepoint-event.h>
+```
+
+tr.c
+```C
+#define TRACEPOINT_CREATE_PROBES
+#define TRACEPOINT_DEFINE
+
+#include "tp.h"
+```
+
+In code:
+```C
+#include "tr.h"
+...
+// in some function
+tracepoint(cray, my_first_tracepoint, <some int>, <some char string>);
+```
+
+Project compile with:
+`-I<path to tr.h header> -llttng -ldl`
