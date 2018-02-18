@@ -9,14 +9,17 @@
     * [x] [gprof](#gprof)
     * [perf](#perf)
         * [x] [perf report](#perf-report)
-        * [perf diff \<filename1> \<filename2>](#perf-diff-filename1-filename2)
-        * [perf data](#perf-data-convert---to-ctf-)
-        * [FlameGraph](#flame-graph)
+        * [x] [perf diff \<filename1> \<filename2>](#perf-diff-filename1-filename2)
+        * [x] [perf data](#perf-data-convert---to-ctf-)
+        * [x] [FlameGraph](#flame-graph)
     * [x] [callgrind](#callgrind)
         * [x] [kcachegrind](#kcachegrind)
     * [x] [summary](#summary)
 * ["Scalpel"](#scalpel)
     * [lttng & babeltrace](#lttng--babeltrace)
+        * [x] [How to gather profile](#how-to-gather-profile)
+        * [ ] [Own trace](#own-trace)
+        * [ ] [Inspect trace with TraceCompass](#inspect-trace-with-tracecompass)
     * [zipkin & blkin](#zipkin--blkin)
 * [Other tools](#other-tools)
     * [go prof](#go-prof)
@@ -383,14 +386,19 @@ FlameGraph is bundle of helper scripts for better visualization of `perf` result
 
 ![flamegraph svg](/img/flamegraph1.png)
 
-How to use them? Go to the `c-ray` directory and then:
+How to use them? First ensure you have `perl` installed, then go to the `c-ray` directory and then:
 ```bash
 $ perf record -g bin/c-ray
 $ perf script | ../FlameGraph/stackcollapse-perf.pl | ../FlameGraph/flamegraph.pl > perf.data.svg
 ```
 
-`perf.data.svg` contains all the informations related to the trace. The bottom-most functions are on the bottom of the stack, the higher the 'tower', the more functions on the stack. I would recommend opening this file in web browser, but apart from perf data it's also contains javascript code which helps navigating and analyzing results, when you click one of the bars it will show you stack from this function up, clicking 'all' after inspecting will get you to the default view. Hovering over bar will show statistics about it in the bottom-left corner.
+`perf.data.svg` contains performance trace saved as 'towers of time spans' with additional javascript functions added to ease navigation between scopes. The bottom-most functions are on the bottom of the stack and to nobody's suprise the higher the 'span tower' the bigger where callstack at the runtime. Vertical size corrseponds to the executiuon time. I would recommend opening this file in web browser because included JS greatly helps with navigating and analyzing results. When you click one of the bars it will show you stack from this function up, clicking 'all' (on the bottom of the graph) after inspecting will get you to the default view. Hovering over bar will show statistics about it in the bottom-left corner.
 
+Screenshot with deeper callstack:
+
+![flamegraph of the kernel](http://www.brendangregg.com/FlameGraphs/cpu-linux-tcpsend.svg)
+
+Source: http://www.brendangregg.com/FlameGraphs/cpu-linux-tcpsend.svg
 
 ## callgrind
 
@@ -564,7 +572,341 @@ Keep in mind that despite that `callgrind` took less seconds than `gprof` total 
 
 # "Scalpel"
 
+
+
 ## lttng & babeltrace
+
+When working with `lttng` there are two phases: first you need to add tracepoints to the application and link against lttng. The second, in which we would gather the profile we will need to create tracing session, enable tracepoints and then continue with execution. At the end we wil lstop the session and review gathered data.
+
+The easiest way to use `lttng` is to use `tracef` fucntion, which accepts the same parameters as `printf`. First we need to link out application with `lttng`, preferably in the way which will allow us to enable it at build time. Check `Makefile` in `c-ray` directory, below `LPROFILE`:
+
+```Makefile
+ifdef LTTNG_SIMPLE                                            
+    CFLAGS += -DLTTNG -DLTTNG_SIMPLE
+    LFLAGS += -llttng-ust -ldl
+endif
+```
+
+I've added two preprocessor defines, `LTTNG` and `LTTNG_SIMPLE` and I've added `lttng-ust` to libraries to link against. The preprocessor defines allow us to include or exclude parts of code at compilation time. `LTTNG` were used in `src/main.c`, at the top of the `main` function:
+
+```C
+int main(int argc, char *argv[]) {
+#ifdef LTTNG
+  getchar();
+#endif
+```
+
+It adds `getchar()` call at the beggining of the program execution. Without it it would be harder for us to get the whole profile, becuase we would lost a few traces. Adding `getchar` gives as time to review registered traces, enable those which we need and then resume execution with logging all reqiured traces. Why two options? Because I will use `getchar` in all `lttng` examples and `LTTNG_SIMPLE` enables only `tracef` function.
+
+Keep in mind that `getchar` is purely optional here, you could start tracing at any moment of program execution, e.g. create session, enable traces defined in already running server application, wait for a few minutes (and trigger execution of codepath you're interested in, if you have mean to do this) to get some results and then finish session and inspect gathered profile.
+
+In the `src/raytrace.c` you could see how I've added `tracef` calls:
+
+```C
+#ifdef LTTNG_SIMPLE
+#include <lttng/tracef.h>
+#endif
+...
+#ifdef LTTNG_SIMPLE
+  tracef("before rayIntersectWithAABB");
+#endif
+```
+
+If `LTTNG_SIMPLE` is defined include `tracef` header file and leave calls to it in the sourcefile.
+
+To compile `c-ray` with `tracef`:
+
+```bash
+$ make clean
+$ LTTNG_SIMPLE=1 make
+```
+
+### How  to gather profile?
+
+First you need to create `lttng session`, to do so type `lttng create <your session name>`:
+```bash
+$ lttng create my-session
+```
+
+After creating session you need to tell `lttng` which traces you want to record. There're few default (with `tracef` example we will use it), but below I show you how to do it in the 'generic way'. In the secod terminal build your application with enabled tracing and start it:
+
+```
+$ LTTNG_SIMPLE=1 make
+$ bin/c-ray
+```
+
+You'll see that the program started, but it's not running any computations yet. That's because out `getchar` call. `lttng` has initiation routine which will register all traces from application and will allow to review them and enable one or many of them. In the first terminal review available traces and enable `tracef`:
+
+```bash
+$ lttng list -u
+UST events:
+-------------
+
+PID: 14173 - Name: bin/c-ray
+      lttng_ust_tracelog:TRACE_DEBUG (loglevel: TRACE_DEBUG (14)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_DEBUG_LINE (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_DEBUG_FUNCTION (loglevel: TRACE_DEBUG_FUNCTION (12)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_DEBUG_UNIT (loglevel: TRACE_DEBUG_UNIT (11)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_DEBUG_MODULE (loglevel: TRACE_DEBUG_MODULE (10)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_DEBUG_PROCESS (loglevel: TRACE_DEBUG_PROCESS (9)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_DEBUG_PROGRAM (loglevel: TRACE_DEBUG_PROGRAM (8)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_DEBUG_SYSTEM (loglevel: TRACE_DEBUG_SYSTEM (7)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_INFO (loglevel: TRACE_INFO (6)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_NOTICE (loglevel: TRACE_NOTICE (5)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_WARNING (loglevel: TRACE_WARNING (4)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_ERR (loglevel: TRACE_ERR (3)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_CRIT (loglevel: TRACE_CRIT (2)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_ALERT (loglevel: TRACE_ALERT (1)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_EMERG (loglevel: TRACE_EMERG (0)) (type: tracepoint)
+      lttng_ust_tracef:event (loglevel: TRACE_DEBUG (14)) (type: tracepoint)
+      lttng_ust_lib:unload (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_lib:debug_link (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_lib:build_id (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_lib:load (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_statedump:end (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_statedump:debug_link (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_statedump:build_id (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_statedump:bin_info (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_statedump:start (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+$ lttng enable-event -u 'lttng_ust_tracef:event'
+UST event lttng_ust_tracef:event created in channel channel0
+$ lttng start
+```
+
+The last command, `lttng start`, starts the tracing of enabled events. Now in the second terminal press \<ENTER>, execution will resume and `lttng` will gather the traces. Keep in mind that if you will add traces in the frequently called functions the trace will grow to very big size (traces from `src/raytrace.c` added to 88GB(!!!) after 5-6min of execution). To prevent overfilling your storage you could stop collecting trace events after chosen time (e.g. 6 min) with `lttng stop`. 
+
+During collecting trace events you could check current execution statistics:
+
+```bash
+$ lttng status
+Tracing session my-session: [active]
+    Trace path: /home/erdk/lttng-traces/my-session-20180218-181827
+
+=== Domain: UST global ===
+
+Buffer type: per UID
+
+Channels:
+-------------
+- channel0: [enabled]
+
+    Attributes:
+      Event-loss mode:  discard
+      Sub-buffer size:  524288 bytes
+      Sub-buffer count: 4
+      Switch timer:     inactive
+      Read timer:       inactive
+      Monitor timer:    1000000 µs
+      Blocking timeout: 0 µs
+      Trace file count: 1 per stream
+      Trace file size:  unlimited
+      Output mode:      mmap
+
+    Statistics:
+      Discarded events: 9223372038833876951
+
+    Event rules:
+      lttng_ust_tracef:event (type: tracepoint) [enabled]
+```
+
+When you decide you collected everything you need stop gathering events and review profile:
+
+```bash
+# after execution ends:
+$ lttng stop
+$ lttng view | less
+[18:44:30.951782113] (+?.?????????) andromeda lttng_ust_tracef:event: { cpu_id = 3 }, { _msg_length = 27, msg = "before rayIntersectWithAABB" }
+[18:44:30.951784713] (+0.000002600) andromeda lttng_ust_tracef:event: { cpu_id = 2 }, { _msg_length = 27, msg = "before rayIntersectWithAABB" }
+[18:44:30.951797505] (+0.000012792) andromeda lttng_ust_tracef:event: { cpu_id = 3 }, { _msg_length = 27, msg = "before rayIntersectWithAABB" }
+[18:44:30.951798075] (+0.000000570) andromeda lttng_ust_tracef:event: { cpu_id = 3 }, { _msg_length = 24, msg = "rayIntersectsWithPolygon" }
+[18:44:30.951798954] (+0.000000879) andromeda lttng_ust_tracef:event: { cpu_id = 2 }, { _msg_length = 27, msg = "before rayIntersectWithAABB" }
+[18:44:30.951799398] (+0.000000444) andromeda lttng_ust_tracef:event: { cpu_id = 2 }, { _msg_length = 24, msg = "rayIntersectsWithPolygon" }
+[18:44:30.951799736] (+0.000000338) andromeda lttng_ust_tracef:event: { cpu_id = 3 }, { _msg_length = 27, msg = "before rayIntersectWithAABB" }
+[18:44:30.951800243] (+0.000000507) andromeda lttng_ust_tracef:event: { cpu_id = 3 }, { _msg_length = 24, msg = "rayIntersectsWithPolygon" }
+[18:44:30.951800478] (+0.000000235) andromeda lttng_ust_tracef:event: { cpu_id = 2 }, { _msg_length = 27, msg = "before rayIntersectWithAABB" }
+[18:44:30.951800893] (+0.000000415) andromeda lttng_ust_tracef:event: { cpu_id = 2 }, { _msg_length = 24, msg = "rayIntersectsWithPolygon" }
+[18:44:30.951801014] (+0.000000121) andromeda lttng_ust_tracef:event: { cpu_id = 3 }, { _msg_length = 29, msg = "after intersecting with nodes" }
+[18:44:30.951801512] (+0.000000498) andromeda lttng_ust_tracef:event: { cpu_id = 2 }, { _msg_length = 29, msg = "after intersecting with nodes" }
+[18:44:30.951801890] (+0.000000378) andromeda lttng_ust_tracef:event: { cpu_id = 3 }, { _msg_length = 27, msg = "before rayIntersectWithAABB" }
+[18:44:30.951801950] (+0.000000060) andromeda lttng_ust_tracef:event: { cpu_id = 2 }, { _msg_length = 27, msg = "before rayIntersectWithAABB" }
+[18:44:30.951802927] (+0.000000977) andromeda lttng_ust_tracef:event: { cpu_id = 2 }, { _msg_length = 27, msg = "before rayIntersectWithAABB" }
+
+```
+
+You could see here messages defined in `src/raytrace.c`, time at which we're executed, time delta between events, event type (here is only one, becuase we only enabled one), CPU at which function was running. After quick look you could see the limitations of the `tracef` function: we called `tracef` in a function which was called from different threads. That's why we got here "three intertwine" profiles. Also `tracef` uses `vasprintf` to save data, which is not the most optimal way to save data. In the next example we will write own trace definition and use it in our application.
+
+### Own trace
+
+Defining own trace definition and enabling it in application is a bit more complicated, but gives better controll what data will be saved in the profile.
+
+Below is typical implementation of trace, first header file `tp.h`:
+
+```H
+#ifdef LTTNG_MYTRACE
+#undef TRACEPOINT_PROVIDER
+#define TRACEPOINT_PROVIDER cray
+
+#undef TRACEPOINT_INCLUDE
+#define TRACEPOINT_INCLUDE "./tp.h"
+
+#if !defined(_TP_H) || defined(TRACEPOINT_HEADER_MULTI_READ)
+#define _TP_H
+
+#include <lttng/tracepoint.h>
+
+TRACEPOINT_EVENT(
+  cray,
+  my_first_tracepoint,
+  TP_ARGS(
+    int, my_integer_arg,
+    char*, my_string_arg                                   ),
+
+  TP_FIELDS(
+    ctf_string(my_string_field, my_string_arg)
+    ctf_integer(int, my_integer_field, my_integer_arg)
+  )
+)
+
+#endif /* _TP_H */
+
+#include <lttng/tracepoint-event.h>
+
+#endif /* LTTNG_MYTRACE */
+```
+
+From the beggining:
+
+- `#ifdef LTTNG_MYTRACE` and `#endif /* LTTNG_MYTRACE */` conditionally enables compilation of tracepoint. In regular application it woudn't be needed, but because `Makefile` we're adjusting gathers sources to compile with glob '*.c' we need this to be able to conditionally include compilation of this trace.
+- following `#undef` and `#define` registers `cray` tracepoint provider. In the previous example it was `lttng_ust_tracef`,
+- next few preprocessor directives calls macros which set options required to generate tracepoint, generally bolierplate code,
+- `TRACEPOINT_EVENT` is definition of our trace, at compilation time preprocessor will generate code from this definition,
+    - `cray` is trace provider, it have to match `TRACEPOINT_PROVIDER` defined above,
+    - `my_first_tracepoint` is name of the tracepoint,
+    - `TP_ARGS` is list of arguments our trace function will accept, the format is: `type`, `name of the variable`, ... For obvious reasons length of this list mus tbe even,
+    - `TP_FIELDS` defines how parameters specified above should be logged:
+        - `ctf_string(my_string_field, my_string_arg)` - string argument, it will be saved as `(my_string_field = XXX)` where `XXX` is the value passed in `my_string_arg`
+        - `ctf_integer(int, my_integer_field, my_integer_arg)` - signed 64bit int argument, it will be saved as `(my_integer_field = XXX)` where `XXX` is vaule passed in `my_integer_arg`
+- at the end there are matching `#endif` and include of header with `lttng`'s macros.
+
+`tp.c` file is boring, most likely you won't need to change much of this. The two key lines are `#define TRACEPOINT_CREATE_PROBES` adn `#define TRACEPOINT_DEFINE` which at compilation phase will instrument precprocessor to generate tracepoint code from 'defines' we wrote in `tp.h`. 
+
+```C
+#ifdef LTTNG_MYTRACE
+
+#define TRACEPOINT_CREATE_PROBES
+#define TRACEPOINT_DEFINE
+
+#include "tp.h"
+
+#endif /* LTTNG_MYTRACE */
+```
+
+Lastly in `Makefile`, below `LTTNG_SIMPLE`:
+
+```Makefile
+
+ifdef LTTNG_MYTRACE
+	CFLAGS += -Isrc -DLTTNG -DLTTNG_MYTRACE
+	LFLAGS += -llttng-ust -ldl
+endif
+```
+
+It's very similar to previous example, only notable change here is `-Isrc` which `tp.c` will require to corectly include `tp.h` file.
+
+To compile project:
+
+```bash
+$ make clean
+$ LTTNG_MYTRACE=1 make
+```
+
+With this we compiled `tp.c` object and added it to our application, but we didn't place calls to our newly defined trace in any of the codepaths, so resulting trace would be empty, time to change this.
+
+...
+
+Now in term #1 start lttng session:
+
+```bash
+$ lttng create my-trace
+Session my-trace created.
+Traces will be written in /home/erdk/lttng-traces/my-trace-20180218-202218
+```
+
+In term #2 execute c-ray:
+```bash
+$ bin/c-ray
+```
+
+Now back to #1. When you list available events at the bottom you'll see our newly defined tracepoint:
+
+```bash
+~ » lttng list -u
+UST events:
+-------------
+
+PID: 30053 - Name: bin/c-ray
+      lttng_ust_tracelog:TRACE_DEBUG (loglevel: TRACE_DEBUG (14)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_DEBUG_LINE (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_DEBUG_FUNCTION (loglevel: TRACE_DEBUG_FUNCTION (12)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_DEBUG_UNIT (loglevel: TRACE_DEBUG_UNIT (11)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_DEBUG_MODULE (loglevel: TRACE_DEBUG_MODULE (10)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_DEBUG_PROCESS (loglevel: TRACE_DEBUG_PROCESS (9)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_DEBUG_PROGRAM (loglevel: TRACE_DEBUG_PROGRAM (8)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_DEBUG_SYSTEM (loglevel: TRACE_DEBUG_SYSTEM (7)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_INFO (loglevel: TRACE_INFO (6)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_NOTICE (loglevel: TRACE_NOTICE (5)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_WARNING (loglevel: TRACE_WARNING (4)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_ERR (loglevel: TRACE_ERR (3)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_CRIT (loglevel: TRACE_CRIT (2)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_ALERT (loglevel: TRACE_ALERT (1)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_EMERG (loglevel: TRACE_EMERG (0)) (type: tracepoint)
+      lttng_ust_tracef:event (loglevel: TRACE_DEBUG (14)) (type: tracepoint)
+      lttng_ust_lib:unload (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_lib:debug_link (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_lib:build_id (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_lib:load (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_statedump:end (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_statedump:debug_link (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_statedump:build_id (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_statedump:bin_info (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_statedump:start (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      cray:my_first_tracepoint (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+```
+
+Now we enable it, resume program execution and after short time we will inspect our profile:
+
+In #1:
+```bash
+$ lttng enable-event -u 'cray:my_first_tracepoint'
+$ lttng start
+```
+
+In #2 press \<ENTER>. After ~2min in #1:
+```bash
+$ lttng stop
+$ lttng view | head -n 10
+~ » lttng view | head -n 10
+[20:26:34.825989192] (+?.?????????) andromeda cray:my_first_tracepoint: { cpu_id = 3 }, { my_string_field = "before reyIntersectWithAABB", my_integer_field = 30344 }
+[20:26:34.825994723] (+0.000005531) andromeda cray:my_first_tracepoint: { cpu_id = 2 }, { my_string_field = "before reyIntersectWithAABB", my_integer_field = 30345 }
+[20:26:34.826003012] (+0.000008289) andromeda cray:my_first_tracepoint: { cpu_id = 2 }, { my_string_field = "before reyIntersectWithAABB", my_integer_field = 30346 }
+[20:26:34.826012860] (+0.000009848) andromeda cray:my_first_tracepoint: { cpu_id = 2 }, { my_string_field = "before reyIntersectWithAABB", my_integer_field = 30345 }
+[20:26:34.826013447] (+0.000000587) andromeda cray:my_first_tracepoint: { cpu_id = 2 }, { my_string_field = "rayIntersectsWithPolygon", my_integer_field = 30345 }
+[20:26:34.826015514] (+0.000002067) andromeda cray:my_first_tracepoint: { cpu_id = 2 }, { my_string_field = "before reyIntersectWithAABB", my_integer_field = 30345 }
+[20:26:34.826016248] (+0.000000734) andromeda cray:my_first_tracepoint: { cpu_id = 2 }, { my_string_field = "rayIntersectsWithPolygon", my_integer_field = 30345 }
+[20:26:34.826016936] (+0.000000688) andromeda cray:my_first_tracepoint: { cpu_id = 2 }, { my_string_field = "after intersecting with nodes", my_integer_field = 30345 }
+[20:26:34.826017850] (+0.000000914) andromeda cray:my_first_tracepoint: { cpu_id = 2 }, { my_string_field = "before reyIntersectWithAABB", my_integer_field = 30345 }
+[20:26:34.826018845] (+0.000000995) andromeda cray:my_first_tracepoint: { cpu_id = 2 }, { my_string_field = "before reyIntersectWithAABB", my_integer_field = 30345 }
+```
+
+Remeber that `lttng` stores traces in fiexd sized buffers, if size of the buffer is too low you'll see following warning:
+
+`[warning] Tracer discarded 2349 events between [20:26:35.656284527] and [20:26:35.669416457] in trace UUID 283815817ab4f419a7bb9ea5618927, at path: ".../lttng-traces/my-trace-20180218-202218/ust/uid/1000/64-bit", within stream id 0, at relative path: "channel0_0". You should consider recording a new trace with larger buffers or with fewer events enabled.`
+
+### Inspect profile with TraceComapss
+
+From http://tracecompass.org download TraceCompass and run it. It's based on Eclipse, so you'll need Java 7+ to run it (Java 9 not supported yet). After downloading run the program and from `File` menu chose `Open Trace`. Then navigate to `$HOME\lttng-traces\<session name + timestamp>\ust\uid\<your user uid>\64-bit\` and choose `metadata`.
+
+![TraceCompass UI](/img/tracecompass1.png)
 
 ## zipkin & blkin
 
