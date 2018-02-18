@@ -733,6 +733,14 @@ $ lttng view | less
 
 ```
 
+`lttng view` actually calls `babeltrace` with current profile session path, equivalent `babeltrace command`:
+
+```bash
+$ babeltrace ~/lttng-traces/my-session-20180218-184338/ust/uid/<your uid>/64-bit
+```
+
+In path `my-session` refers to the session name you provided to `lttng create` and following number are timestamp of when the trace was captured.
+
 You could see here messages defined in `src/raytrace.c`, time at which we're executed, time delta between events, event type (here is only one, becuase we only enabled one), CPU at which function was running. After quick look you could see the limitations of the `tracef` function: we called `tracef` in a function which was called from different threads. That's why we got here "three intertwine" profiles. Also `tracef` uses `vasprintf` to save data, which is not the most optimal way to save data. In the next example we will write own trace definition and use it in our application.
 
 ### Own trace
@@ -902,11 +910,104 @@ Remeber that `lttng` stores traces in fiexd sized buffers, if size of the buffer
 
 `[warning] Tracer discarded 2349 events between [20:26:35.656284527] and [20:26:35.669416457] in trace UUID 283815817ab4f419a7bb9ea5618927, at path: ".../lttng-traces/my-trace-20180218-202218/ust/uid/1000/64-bit", within stream id 0, at relative path: "channel0_0". You should consider recording a new trace with larger buffers or with fewer events enabled.`
 
+Similarily you could add more traces, e.g. from `tp2.h`:
+
+```H
+#ifdef LTTNG_MULTITRACE
+#undef TRACEPOINT_PROVIDER
+#define TRACEPOINT_PROVIDER cray
+
+#undef TRACEPOINT_INCLUDE
+#define TRACEPOINT_INCLUDE "./tp2.h"
+
+#if !defined(_TP2_H) || defined(TRACEPOINT_HEADER_MULTI_READ)
+#define _TP2_H
+
+#include <lttng/tracepoint.h>
+
+TRACEPOINT_EVENT(
+  cray,
+  intersect_aabb,
+  TP_ARGS(void),
+)
+
+TRACEPOINT_EVENT(
+  cray,
+  intersect_nodes,
+  TP_ARGS(void),
+)
+
+TRACEPOINT_EVENT(
+  cray,
+  intersect_polygon,
+  TP_ARGS(void),
+)
+
+
+#endif /* _TP2_H */
+
+#include <lttng/tracepoint-event.h>
+
+#endif /* LTTNG_MULTITRACE */
+```
+
+Here we defined 3 tracepoints, each without arguments. Youd could inspect them at runtime (remeber to create lttng session first!):
+
+```bash
+$ lttng list -u
+UST events:                                                                                                                                                                       
+-------------                                                                                                                                                                     
+                                                                                                                                                                                  
+PID: 1355 - Name: bin/c-ray                                                                                                                                                       
+      lttng_ust_tracelog:TRACE_DEBUG (loglevel: TRACE_DEBUG (14)) (type: tracepoint)                                                                                              
+      lttng_ust_tracelog:TRACE_DEBUG_LINE (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_DEBUG_FUNCTION (loglevel: TRACE_DEBUG_FUNCTION (12)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_DEBUG_UNIT (loglevel: TRACE_DEBUG_UNIT (11)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_DEBUG_MODULE (loglevel: TRACE_DEBUG_MODULE (10)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_DEBUG_PROCESS (loglevel: TRACE_DEBUG_PROCESS (9)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_DEBUG_PROGRAM (loglevel: TRACE_DEBUG_PROGRAM (8)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_DEBUG_SYSTEM (loglevel: TRACE_DEBUG_SYSTEM (7)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_INFO (loglevel: TRACE_INFO (6)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_NOTICE (loglevel: TRACE_NOTICE (5)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_WARNING (loglevel: TRACE_WARNING (4)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_ERR (loglevel: TRACE_ERR (3)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_CRIT (loglevel: TRACE_CRIT (2)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_ALERT (loglevel: TRACE_ALERT (1)) (type: tracepoint)
+      lttng_ust_tracelog:TRACE_EMERG (loglevel: TRACE_EMERG (0)) (type: tracepoint)
+      lttng_ust_tracef:event (loglevel: TRACE_DEBUG (14)) (type: tracepoint)
+      lttng_ust_lib:unload (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_lib:debug_link (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_lib:build_id (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_lib:load (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_statedump:end (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_statedump:debug_link (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_statedump:build_id (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_statedump:bin_info (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      lttng_ust_statedump:start (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      cray:intersect_polygon (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      cray:intersect_nodes (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+      cray:intersect_aabb (loglevel: TRACE_DEBUG_LINE (13)) (type: tracepoint)
+```
+
+Now you could enable one of them:
+```bash
+$ lttng enable-event -u 'cray:intersect_polygon'
+```
+
+Or all:
+```bash
+$ lttng enable-event -u 'cray:*'
+```
+
 ### Inspect profile with TraceComapss
 
 From http://tracecompass.org download TraceCompass and run it. It's based on Eclipse, so you'll need Java 7+ to run it (Java 9 not supported yet). After downloading run the program and from `File` menu chose `Open Trace`. Then navigate to `$HOME\lttng-traces\<session name + timestamp>\ust\uid\<your user uid>\64-bit\` and choose `metadata`.
 
+Here is screenshot with data collected whit enabled `cray:my_first_tracepoint`:
 ![TraceCompass UI](/img/tracecompass1.png)
+
+And here with multi tracepoint example:
+![TraceCompass multi traces](/img/tracecompass2.png)
 
 ## zipkin & blkin
 
