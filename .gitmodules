@@ -4,3 +4,6 @@
 [submodule "FlameGraph"]
 	path = FlameGraph
 	url = https://github.com/brendangregg/FlameGraph
+[submodule "blkin"]
+	path = blkin
+	url = https://github.com/ceph/blkin
