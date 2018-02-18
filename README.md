@@ -50,7 +50,6 @@ After (or before) clonnig repository install applications and libraries from thi
 
 Each of those tools produces three types of results:
 
-
 - flat profile: shows how much time your program spent in each function, and how many times that function was called. As the name suggests on this view you won't see any relation between functions,
 - call graph: for each function shows which functions called it, which other functions was called by it, and how many times. There is also an estimate of how much time was spent in the subroutines of each function.
 - annotate source code: returns source code with performance metrics in lines, where it was applicable.
@@ -363,22 +362,23 @@ Select function with arrow keys and press 'a' to go to the annotated view. Witho
 When app was compiled with debug information asm code will be interleaved with C code:
 ![perf annotated asm and C](/img/perf4.png)
 
-GTK2 interface:
-`perf report --gtk`
+GTK2 interface: `perf report --gtk` (needs compiled in support, e.g. screenshot below is taken on Archlinux, because on Fedora this is not compiled in)
+![perf gtk interface](/img/perf5.png)
 
 ### perf diff \<filename1> \<filename2>
 
 `perf diff \<filename1> \<filename2>` compares to perf files.
-TODO: screenshot, fedora by default doesn't include support for this
+![perf diff](/img/perf6.png)
+
+Above screenshot contains `perf diff` output of two runs of `perf record -g`. `perf` by default creates `perf.data` file which contains performance counters. When you run it the secod time older session will be renamed to `perf.data.old` and new will be saved to `perf.data`. Then when you run `perf diff` (without any other options) it will compare those two sessions, where `perf.data.old` will be a baseline against which `perf.data` will be compared. 
 
 ### perf data convert --to-ctf <path>
   
-  convert native perf data format to CTF, understandable by babeltrace, kcachegrind.
-  TODO: example, fedora by default doesn't include support for this
+  Convert native perf data format to CTF, understandable by babeltrace. I didn't encounter a distro in which this is enabled, but it looks like it could be done via building `perf` from sources. Only for courageous ;)
 
 ## callgrind
 
-Similarily to previous tools `callgrind` doesn't require changes to the code, it's sufficient to compile with optimizations and debug information turned on. Contrary to `gprof` and `perf` it doesn't run code directly on host CPU, but via it's own simulator. This allow  
+Similarily to previous tools `callgrind` doesn't require changes to the code, it's sufficient to compile with optimizations and debug information turned on. Contrary to `gprof` and `perf` it doesn't run code directly on host CPU, but via it's own simulator. The counters are gathered directly from simulator's state, which produces near real-life characteristic. On the downside simplator runs only on a single thread and serializes all the code, so multi-thread, computation heavy applications will run terribly slow.
 
 To gather profile:
 ```bash
@@ -562,6 +562,7 @@ Keep in mind that despite that `callgrind` took less seconds than `gprof` total 
 - gprof: `man gprof`
 - perf: https://dev.to/etcwilde/perf---perfect-profiling-of-cc-on-linux-of
 - perf: https://perf.wiki.kernel.org/index.php/Tutorial
+- perf: http://www.brendangregg.com/perf.html
 - valgrind: http://valgrind.org/docs/manual/cl-manual.html
 - (Q|K)cachegrind: https://github.com/KDE/kcachegrind
 - LTTNG: https://lttng.org/docs/v2.10/#doc-what-is-tracing
