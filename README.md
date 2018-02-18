@@ -11,6 +11,7 @@
         * [x] [perf report](#perf-report)
         * [perf diff \<filename1> \<filename2>](#perf-diff-filename1-filename2)
         * [perf data](#perf-data-convert---to-ctf-)
+        * [FlameGraph](#flame-graph)
     * [x] [callgrind](#callgrind)
         * [x] [kcachegrind](#kcachegrind)
     * [x] [summary](#summary)
@@ -370,11 +371,26 @@ GTK2 interface: `perf report --gtk` (needs compiled in support, e.g. screenshot 
 `perf diff \<filename1> \<filename2>` compares to perf files.
 ![perf diff](/img/perf6.png)
 
-Above screenshot contains `perf diff` output of two runs of `perf record -g`. `perf` by default creates `perf.data` file which contains performance counters. When you run it the secod time older session will be renamed to `perf.data.old` and new will be saved to `perf.data`. Then when you run `perf diff` (without any other options) it will compare those two sessions, where `perf.data.old` will be a baseline against which `perf.data` will be compared. 
+Above screenshot contains `perf diff` output of two runs of `perf record -g`. `perf` by default creates `perf.data` file which contains performance counters. When you run it the secod time older session will be renamed to `perf.data.old` and new will be saved to `perf.data`. Then when you run `perf diff` (without any other options) it will compare those two sessions, where `perf.data.old` will be a baseline against which `perf.data` will be compared. In the first column there's baseline profile, in the second difference in execution time of matching symbols, in third there's executable or library from which symbol originates and in the last symbol name. By default `perf diff` sorts results by absoulte delta (abs(delta)), that's why results in the first column are out of order and 
 
 ### perf data convert --to-ctf <path>
   
   Convert native perf data format to CTF, understandable by babeltrace. I didn't encounter a distro in which this is enabled, but it looks like it could be done via building `perf` from sources. Only for courageous ;)
+
+### FlameGraph
+
+FlameGraph is bundle of helper scripts for better visualization of `perf` results. It's good to get the idea how all functions looks on the timegraph, how each function contributes to the total execution time:
+
+![flamegraph svg](/img/flamegraph1.png)
+
+How to use them? Go to the `c-ray` directory and then:
+```bash
+$ perf record -g bin/c-ray
+$ perf script | ../FlameGraph/stackcollapse-perf.pl | ../FlameGraph/flamegraph.pl > perf.data.svg
+```
+
+`perf.data.svg` contains all the informations related to the trace. The bottom-most functions are on the bottom of the stack, the higher the 'tower', the more functions on the stack. I would recommend opening this file in web browser, but apart from perf data it's also contains javascript code which helps navigating and analyzing results, when you click one of the bars it will show you stack from this function up, clicking 'all' after inspecting will get you to the default view. Hovering over bar will show statistics about it in the bottom-left corner.
+
 
 ## callgrind
 

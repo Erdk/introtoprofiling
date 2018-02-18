@@ -1,3 +1,6 @@
 [submodule "c-ray"]
 	path = c-ray
 	url = https://github.com/Erdk/c-ray
+[submodule "FlameGraph"]
+	path = FlameGraph
+	url = https://github.com/brendangregg/FlameGraph
