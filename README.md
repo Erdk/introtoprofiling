@@ -2,27 +2,28 @@
 
 ## Table of contents
 <!--ts-->
-* [Get sources](#get-sources)
-* [Introduction](#introduction)
-* [Throw against the wall and see what sticks](#throw-against-the-wall-and-see-what-sticks)
+* [x] [Get sources](#get-sources)
+* [x] [Introduction](#introduction)
+* [x] [Throw against the wall and see what sticks](#throw-against-the-wall-and-see-what-sticks)
     * [x] [Pros & cons](#pros--cons)
     * [x] [gprof](#gprof)
-    * [perf](#perf)
+    * [x] [perf](#perf)
         * [x] [perf report](#perf-report)
         * [x] [perf diff \<filename1> \<filename2>](#perf-diff-filename1-filename2)
         * [x] [perf data](#perf-data-convert---to-ctf-)
-        * [x] [FlameGraph](#flame-graph)
+        * [x] [FlameGraph](#flamegraph)
     * [x] [callgrind](#callgrind)
         * [x] [kcachegrind](#kcachegrind)
     * [x] [summary](#summary)
 * ["Scalpel"](#scalpel)
     * [lttng & babeltrace](#lttng--babeltrace)
-        * [x] [How to gather profile](#how-to-gather-profile)
-        * [ ] [Own trace](#own-trace)
-        * [ ] [Inspect trace with TraceCompass](#inspect-trace-with-tracecompass)
-    * [zipkin & blkin](#zipkin--blkin)
-* [Other tools](#other-tools)
-    * [go prof](#go-prof)
+        * [x] [How to gather profile](#how--to-gather-profile)
+        * [x] [Own trace](#own-trace)
+        * [x] [Multiple tracepoints](#multiple-tracepoints)
+        * [x] [Inspect trace with TraceCompass](#inspect-trace-with-tracecompass)
+    * [ ] [zipkin & blkin](#zipkin--blkin)
+* [ ] [Other tools](#other-tools)
+    * [ ] [go prof](#go-prof)
 * [x] [Sources](#sources)
 <!--ts-->
 
@@ -910,6 +911,8 @@ Remeber that `lttng` stores traces in fiexd sized buffers, if size of the buffer
 
 `[warning] Tracer discarded 2349 events between [20:26:35.656284527] and [20:26:35.669416457] in trace UUID 283815817ab4f419a7bb9ea5618927, at path: ".../lttng-traces/my-trace-20180218-202218/ust/uid/1000/64-bit", within stream id 0, at relative path: "channel0_0". You should consider recording a new trace with larger buffers or with fewer events enabled.`
 
+### Multiple tracepoints
+
 Similarily you could add more traces, e.g. from `tp2.h`:
 
 ```H
@@ -999,7 +1002,7 @@ Or all:
 $ lttng enable-event -u 'cray:*'
 ```
 
-### Inspect profile with TraceComapss
+### Inspect trace with TraceComapss
 
 From http://tracecompass.org download TraceCompass and run it. It's based on Eclipse, so you'll need Java 7+ to run it (Java 9 not supported yet). After downloading run the program and from `File` menu chose `Open Trace`. Then navigate to `$HOME\lttng-traces\<session name + timestamp>\ust\uid\<your user uid>\64-bit\` and choose `metadata`.
 
